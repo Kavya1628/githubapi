@@ -1,0 +1,5 @@
+#!/bin/bash
+ country = "INDIA"
+ year= 2022
+ echo "country name:$country"
+ echo "year:$year"
