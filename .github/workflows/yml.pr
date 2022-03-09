@@ -1,0 +1,152 @@
+name: CONCR_BE_DEVPR BUILD
+
+ 
+
+on:
+
+  pull_request:
+
+    branches:
+
+      - dev
+
+     
+
+ 
+
+jobs:
+
+  mvn-Build:
+
+    runs-on: [self-hosted,CONCR_BE_DEVPR]
+
+    env:
+
+      HTTP_PROXY: http://185.46.212.98:10015
+
+      HTTPS_PROXY: http://185.46.212.98:10015
+
+ 
+
+    steps:
+
+      - uses: actions/checkout@v2
+
+        with:
+
+          fetch-depth: 0
+
+       
+
+      - name: Run CONCR_BE_DEVPR BUILD
+
+        run: |
+
+            echo "PRNumber= ${{ github.event.number }"
+
+            mvn clean install -Pdev
+
+            
+
+            if [ "$?" -gt "0" ];then echo "build failed for :\"CONCR_BE\""; exit 1; fi
+
+ 
+
+  Sonar-Analysis:
+
+    needs: mvn-Build
+
+    runs-on: [self-hosted,CONCR_BE_DEVPR] 
+
+    
+
+    steps:
+
+      - name: Run CONCR_BE DEV-PR sonar_analysis
+
+        run: |
+
+           mvn sonar:sonar -Dsonar.projectKey=CAO_CONCR_BE_DEV_GATED -Dsonar.projectName=CAO_CONCR_BE_DEV_GATED -Dsonar.host.url=${{ secrets.SONARURL }} -Dsonar.login=${{ secrets.SONARTOKEN }} -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.branch=${{ GITHUB.HEAD_REF }} -Dsonar.pullrequest.base=${{ GITHUB.BASE_REF }} -Dsonar.scm.revision=${{ github.event.pull_request.head.sha }}
+
+          
+
+           if [ "$?" -gt "0" ];then echo "Sonar analysis failed for :\"CONCR_BE\""; exit 1; fi
+
+ 
+
+  Sonar-Gating:
+
+    needs: Sonar-Analysis
+
+    runs-on: [self-hosted,CONCR_BE_DEVPR] 
+
+    
+
+    steps:
+
+      - name: Run CONCR_BE DEV-PR sonar_gating
+
+        run: |
+
+            chmod 755 build-scripts/sonargating.sh
+
+            dos2unix build-scripts/sonargating.sh
+
+            /bin/bash build-scripts/sonargating.sh ${{ secrets.SONARTOKEN }} ${{ secrets.SONARURL }} "CAO_CONCR_BE_DEV_GATED" "CAO_CONCR_BE_DEV_GATED"
+
+ 
+
+  jscpd-Gating:
+
+    needs: mvn-Build
+
+    runs-on: [self-hosted,CONCR_BE_DEVPR] 
+
+    
+
+    steps:
+
+      - name: Run CONCR_BE_DEVPR jscpd_gating
+
+        run: |
+
+            export PATH="/lx283data/nodejs1016/node-v10.16.3-linux-x64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games"
+
+            /lx283data/jenkins/.npm-global/bin/jscpd --version
+
+            /lx283data/jenkins/.npm-global/bin/jscpd --min-tokens 50 --reporters "console,html" "."  --output "." --threshold 36
+
+  
+
+  smoke-testing:
+
+    needs: Sonar-Gating
+
+    runs-on: [self-hosted,windows-smoketest] 
+
+    steps:
+
+      - uses: actions/checkout@v2
+
+        with:
+
+          fetch-depth: 0
+
+          repository: philips-internal/HSRA_Checklist_Automation
+
+          token: ${{ secrets.GithubPAT }}
+
+          path: HSRA_Checklist_Automation 
+
+    
+
+      - name: run  smoke test
+
+        run: |
+
+        
+
+            cd "${{ github.workspace }}\HSRA_Checklist_Automation"
+
+            mvn test -D"cucumber.options"="--tags @smoke"
+      
